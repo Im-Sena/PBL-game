@@ -2,7 +2,7 @@ import socket  # ソケット通信ライブラリ
 import threading  # マルチスレッド用ライブラリ
 import sys  # システム制御用ライブラリ
 
-#コミットのテスト用
+test = 0
 
 # --- 接続設定 ---
 ip = '16.ip.as.ply.gg'
