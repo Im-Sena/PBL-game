@@ -1,6 +1,8 @@
-import socket  # ソケット通信ライブラリ
-import threading  # マルチスレッド用ライブラリ
-import sys  # システム制御用ライブラリ
+import socket  # ソケット通信ライブラリ(標準)
+import threading  # マルチスレッド用ライブラリ(標準)
+import sys  # システム制御用ライブラリ(標準)
+import csv #csv読み込みライブラリ(標準)
+import random #ランダムモジュールを使うためのライブラリ(標準)
 
 # --- グローバル変数と排他制御用ロック ---
 rooms = {}  # ルーム名をキーとし、(conn, name) のリストを値に持つ辞書
@@ -49,6 +51,18 @@ def recv_line(conn):
         buffer += chunk
     return buffer.strip()  # 前後の空白・改行を除去して返す
 
+#ゲーム内の処理
+def inGame(room, message, name):
+        broadcast_to_room_all(room, f"{name}がゲームを開始しました...")
+        broadcast_to_room_all(room, f"今から皆さんにお題を送ります")
+        #word.csvファイルからお題を読み込む　
+        with open('word.csv', encoding='utf-8') as f:
+            reader = csv.reader(f) #CSVファイルの内容を「行ごとのリスト」として読み取るオブジェクトを作る この時点ではlen(長さ)を持っていない
+            wordList = [i for i in reader] #wordListに要素を格納
+            wordLen = len(wordList)#wordListの行数
+            n = random.randint(0,wordLen - 1)#整数の乱数を作る maxは要素の行数
+            print_safe(f"今回与えられるお題は{wordList[n]}")
+
 
 # --- クライアント接続処理 ---
 def handle_client(connection, address):
@@ -75,8 +89,7 @@ def handle_client(connection, address):
                 break
             elif data == "/start":
                 print_safe(f"[{room} / {name}] {data}")
-                broadcast_to_room_all(room, f"{name}がゲームを開始しました")
-                broadcast_to_room_all(room, f"今から皆さんにお題を送ります")
+                inGame(room, data, name)
             elif data == "/member":
                 print_safe(f"[{room} / {name}] {data}")
                 with rooms_lock:
