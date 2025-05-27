@@ -1,142 +1,147 @@
-import socket  # ソケット通信ライブラリ
-import threading  # マルチスレッド用ライブラリ
-import sys  # システム制御用ライブラリ
+import socket #Socketライブラリのインポート(python標準) 
+import threading #マルチクライアントをのためのライブラリ(python標準)
+import sys #システムにアクセスするためのライブラリ(python標準)
 
-# --- グローバル変数と排他制御用ロック ---
-rooms = {}  # ルーム名をキーとし、(conn, name) のリストを値に持つ辞書
-rooms_lock = threading.Lock()  # rooms操作の排他制御用ロック
-CAPACITY = 4  # 一部用途で使用（人数上限表示など）
+clients =[]  # 現在接続している全クライアントのソケット 
+clients_full = []
+clients_lock=threading.Lock()
 
-# --- ルームに所属するユーザー全員にメッセージを送る（送信者以外） ---
-def broadcast_to_room(room, message, sender_conn):
-    with rooms_lock:
-        for conn, _ in rooms.get(room, []):
-            if conn != sender_conn:
+
+#メッセージを他の人に送信する関数(送信者を除く)
+def broadcast(message, sender_conn):
+    # 同時に操作されないようにロック withを使うことで中の処理が終わったら自動的にロック解除 
+    #lock.acquire(),lock.release()で挟むのも可 
+    with clients_lock: #threadに割り込み(排他的制御) 
+        for client in clients: #clientsのリスト/回 loop 
+            if client != sender_conn:  # 送信者には送らない  
                 try:
-                    conn.send(message.encode('utf-8'))
+                    client.send(message.encode('utf-8'))  # メッセージを送信 
                 except:
-                    pass  # エラー発生時もスキップ（切断など）
+                    clients.remove(client)  # 接続が切れたら削除 
 
-# --- ルームに所属するユーザー全員にメッセージを送る ---
-def broadcast_to_room_all(room, message, sender_conn):
-    with rooms_lock:
-        for conn, _ in rooms.get(room, []):
-            try:
-                conn.send(message.encode('utf-8'))
-            except Exception as e:
-                print(f"[!] Error sending to {conn}: {e}")
 
-# --- サーバーからメッセージを送信する（全ルーム対象） ---
+#サーバーから他の人にメッセージを送る
 def server_message(message):
-    with rooms_lock:
-        for users in rooms.values():
-            for conn, _ in users:
-                try:
-                    conn.send(message.encode('utf-8'))
-                except:
-                    pass
+    # 同時に操作されないようにロック withを使うことで中の処理が終わったら自動的にロック解除 
+    #lock.acquire(),lock.release()で挟むのも可 
+    with clients_lock: #threadに割り込み(排他的制御) 
+        for client in clients: #clientsのリスト/回 loop 
+            try:
+                client.send(message.encode('utf-8'))  # メッセージを送信 
+            except:
+                clients.remove(client)  # 接続が切れたら削除 
 
-# --- クライアント接続処理 ---
+
+# 個々のクライアントを処理する関数 
 def handle_client(connection, address):
     print_safe(f"Client connected: {address}")
 
-    # クライアントからルーム名とユーザーネームを受信
-    room = connection.recv(1024).decode().strip()
-    name = connection.recv(1024).decode().strip()
-    
-    ready = []
-
-    # ルームが存在しない場合は新規作成し、ユーザーを追加
-    with rooms_lock:
-        if room not in rooms:
-            rooms[room] = []
-        rooms[room].append((connection, name))
-
+    with clients_lock: #割り込み 
+         clients.append(connection) #配列の末尾に追加 
+         clients_full.append((conn, addr))
     try:
         while True:
-            data = connection.recv(4096).decode()  # メッセージ受信
-            if not data or data == "/quit":  # 空または"/quit"で切断処理へ
+            data = connection.recv(4096).decode() #相手から送信されるデータを待ち受けてbytesオブジェクトとして受信,デコード recvの引数はバッファ 
+            if not data or data == "quit":#空かquitなら処理終了 
                 break
-            elif data == "/start":
-                broadcast_to_room_all(room, f"{name}がゲームを開始しました", connection)
-                broadcast_to_room_all(room, f"今から皆さんにお題を送ります", connection)
-                
-            else:
-                print_safe(f"[{room} / {name}] {data}")
-                broadcast_to_room(room, f"{name}: {data}", connection)  # 他ユーザーに中継
+            print_safe(f"[{address}] {data}") #コンソール上に受信したメッセージを記 
+            #response = f"[{address}] said : [{data}]" 
+            #connection.send(response.encode("utf-8")) #エンコード,送信 
+            broadcast(f"[{address}] {data}", connection)  # みんなに配信 
     except:
         pass
     finally:
-        # 切断処理
-        with rooms_lock:
-            rooms[room] = [(c, n) for (c, n) in rooms[room] if c != connection]
-            if not rooms[room]:  # ルームが空になったら削除
-                del rooms[room]
-        connection.close()
-        print(f"[-] Disconnected {name} from {room}")
+        # 切断処理 
+        with clients_lock:
+            clients.remove(connection)
+            clients_full.remove((conn, addr))
+        connection.close(connection)
+        print(f"[-] Disconnected {address}")
+        
 
-# --- コンソール入力受付スレッド ---
+
+# コンソールから入力を受け付ける別スレッド 
 def input_thread():
-    global running
+    global running #グローバル変数 
     while True:
         cmd = input('>>>')
         if cmd == "exit":
             running = False
             break
-        elif cmd == "exit":
-            running = False
-            break
         elif cmd == "list":
-            with rooms_lock:
-                if not rooms:
-                    print("[接続中] なし")
+            with clients_lock:
+                if not clients:
+                    print("[接続中クライアント] なし")
                 else:
-                    print("[ルーム一覧]")
-                    for room, users in rooms.items():
-                        print(f"  {room} ({len(users)}人)")
-                        for conn, uname in users:
-                            print(f"    - {uname}")
+                    print("[接続中クライアント]")
+                    for i, (conn, addr) in enumerate(clients_full, 1):#enumerateでインデックスを付与
+                        print(f"  {i}: {addr[0]}:{addr[1]}")
         elif cmd == "say":
             msg = input('>')
             print(f"全クライアントに'{msg}'を送信しました。")
-            server_message(f"[server]: {msg}")
-        elif cmd == "cap":
-            with rooms_lock:
-                total = sum(len(users) for users in rooms.values())
-            print(f"総接続数: {total}/{CAPACITY}")
-            server_message(f"接続数: {total}/{CAPACITY}")
+            server_message(f"[server]:{msg}")
 
-# --- プロンプト補正付き出力 ---
-def print_safe(*args, **kwargs):
-    with threading.Lock():
-        print(*args, **kwargs)
-        sys.stdout.write(">>>")
-        sys.stdout.flush()
+#コンソールに常に[>]を出すための割り込み処理 
+def print_safe(*args, **kwargs): #可変長引数を使う 
+    with threading.Lock(): #threadに割り込み 
+        print(*args, **kwargs)        # 普通のログ出力 
+        sys.stdout.write(">>>")        # プロンプト再表示（改行なし）
+        sys.stdout.flush()            # 画面に即時反映 
 
-# --- サーバー起動設定 ---
-ip = '127.0.0.1'  # ローカルホスト
-print("ポートを入力してください")
-port = int(input(">>>"))  # ポート番号入力
 
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.bind((ip, port))  # ソケットをバインド
-s.listen(CAPACITY)  # 接続待機上限
-s.settimeout(1.0)  # 1秒ごとに accept タイムアウト
+
+
+#サーバのipとport設定 
+ip = '127.0.0.1' #(127.0.0.1)はlocalhost host名の指定も可 
+port = 8000 #0-1023以外
+
+#ソケットの作成
+s= socket.socket(socket.AF_INET, socket.SOCK_STREAM) 
+#ソケットを作成して変数sに割り当て AF_INET = ipv4 
+#ストリームソケットはTCPを使用して通信を行えるようにしてくれる 
+s.bind((ip, port)) #ipとportをタプルで指定  
+s.listen(4) #サーバを有効にして接続を受け取る 引数で最大接続人数指定可 
+
+s.settimeout(1.0)  # 1秒ごとに accept() をタイムアウト 
 running = True
 
-print(f"[✓] Server started on {ip}:{port}, waiting for connections...")
+
+print(f"[✓]Server started on {ip}:{port}, waiting for connections...")
 print("Type 'exit' to shut down.")
 
-# 入力スレッド起動
+'''
+#接続の受付 
+connection, address = s.accept() #s.accept()で接続を受け付け
+print("client ; {}".format(address)) #接続相手のipをprint 
+#接続の維持
+while True:
+    receive = connection.recv(4096).decode()#相手から送信されるデータを待ち受けてbytesオブジェクトとして受信,デコード recvの引数はバッファ 
+    if receive == "quit": #quitを受信でbreak 
+        break
+    print("received -> message : {}".format(receive))
+    send_message = "you said : [{}] ".format(receive)
+    connection.send(send_message.encode("utf-8")) #エンコード,クライアントに送信 
+
+
+#接続終了 
+connection.close() #コネクション切断 
+s.close()
+print("Communication disconnected")
+'''
+
 threading.Thread(target=input_thread, daemon=True).start()
 
-# --- 接続ループ ---
+#loop 
 while running:
     try:
-        conn, addr = s.accept()
-        threading.Thread(target=handle_client, args=(conn, addr)).start()
+        conn, addr = s.accept() #s.accept()で接続を受け付け 
+        #新しいスレッドの作成, target=handle_clientでスレッドが実行される関数を指定 
+        client_thread = threading.Thread(target=handle_client, args=(conn, addr))
+        client_thread.start() #スレッド実行 
+
     except socket.timeout:
-        continue  # タイムアウト時はループ継続
+        #タイムアウト = 新しい接続なし → 何もしないで次のループへ 
+        continue
 
 s.close()
 print("Server stopped.")

@@ -1,54 +1,43 @@
-import socket  # ソケット通信ライブラリ
-import threading  # マルチスレッド用ライブラリ
-import sys  # システム制御用ライブラリ
+import socket #Socketライブラリのインポート(python標準) 
+import threading #マルチクライアントをのためのライブラリ(python標準) 
 
-test = 0
 
-# --- 接続設定 ---
-ip = '16.ip.as.ply.gg'
-print("ポートを入力してください")
-port = int(input(">>>"))
+#サーバのipとport設定 
+ip = '127.0.0.1' #(127.0.0.1)はlocalhost host名の指定も可 
+port = 8000 #0-1023以外
 
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+#ソケットの作成
+s= socket.socket(socket.AF_INET, socket.SOCK_STREAM) 
+#ソケットを作成して変数sに割り当て AF_INET = ipv4 
+#ストリームソケットはTCPを使用して通信を行えるようにしてくれる 
+#s.bind((ip, port)) #ipとportをタプルで指定 
 s.connect((ip, port))
+
 print("Connected!!!!!")
 
-# --- ユーザー情報送信 ---
-print("ルーム名を入力してください")
-room = input(">>>")
-print("ユーザーネームを入力してください")
-name = input(">>>")
-s.sendall(room.encode('utf-8'))
-s.sendall(name.encode('utf-8'))
-
-# --- プロンプト補正付き出力 ---
-def print_safe(*args, **kwargs):
-    with threading.Lock():
-        print(*args, **kwargs)
-        sys.stdout.write(">")
-        sys.stdout.flush()
-
-
-# --- サーバからのメッセージ受信処理 ---
+# --- サーバからのメッセージを受け取って表示 ---
 def receive_messages(sock):
     while True:
         try:
             msg = sock.recv(4096).decode('utf-8')
             if msg:
-                print_safe(msg)  # 改行＋プロンプト復活
+                print("\n" + msg + "\n> ", end="")  # 改行せずにプロンプト復活
         except:
             break
 
-# --- 受信スレッド開始 ---
+# --- メイン処理 ---
+#with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+#    s.connect((ip, port))  # サーバに接続
+
 threading.Thread(target=receive_messages, args=(s,), daemon=True).start()
-
-# --- メッセージ送信ループ ---
+    #接続の維持
 while True:
-    message = input('>')
-    if not message:
-        s.send("/quit".encode("utf-8"))
+    print("<メッセージを入力してください>")
+    message = input('>>>')
+    if not message: #空だったらquitを送信 
+        s.send("quit".encode("utf-8"))
         break
-    s.send(message.encode("utf-8"))
-
+    s.send(message.encode("utf-8")) #エンコード,サーバに送信  
+	
 s.close()
 print("END")
