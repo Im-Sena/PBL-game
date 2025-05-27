@@ -78,6 +78,8 @@ def receive_messages(sock):
                 # メッセージがコマンドっぽい場合の処理（例）
                 if line.startswith("%"):
                     print_safe("コマンドです")
+                    #lineの%を除去して表示
+                    line = line[1:].strip()
                     print_safe(line)         
                 else:
                     # 普通のメッセージは画面に表示
