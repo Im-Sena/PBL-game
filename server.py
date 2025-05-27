@@ -6,9 +6,14 @@ clients =[]  # 現在接続している全クライアントのソケット
 clients_full = []
 clients_lock=threading.Lock()
 
+roomPlayer = 0
+CAPACITY = 4
+
+
 
 #メッセージを他の人に送信する関数(送信者を除く)
 def broadcast(message, sender_conn):
+    global roomPlayer
     # 同時に操作されないようにロック withを使うことで中の処理が終わったら自動的にロック解除 
     #lock.acquire(),lock.release()で挟むのも可 
     with clients_lock: #threadに割り込み(排他的制御) 
@@ -18,10 +23,12 @@ def broadcast(message, sender_conn):
                     client.send(message.encode('utf-8'))  # メッセージを送信 
                 except:
                     clients.remove(client)  # 接続が切れたら削除 
+                    roomPlayer -= 1
 
 
 #サーバーから他の人にメッセージを送る
 def server_message(message):
+    global roomPlayer
     # 同時に操作されないようにロック withを使うことで中の処理が終わったら自動的にロック解除 
     #lock.acquire(),lock.release()で挟むのも可 
     with clients_lock: #threadに割り込み(排他的制御) 
@@ -30,19 +37,24 @@ def server_message(message):
                 client.send(message.encode('utf-8'))  # メッセージを送信 
             except:
                 clients.remove(client)  # 接続が切れたら削除 
+                roomPlayer -= 1
 
 
 # 個々のクライアントを処理する関数 
 def handle_client(connection, address):
     print_safe(f"Client connected: {address}")
 
+    global roomPlayer
+
     with clients_lock: #割り込み 
          clients.append(connection) #配列の末尾に追加 
          clients_full.append((conn, addr))
+         roomPlayer += 1
     try:
         while True:
             data = connection.recv(4096).decode() #相手から送信されるデータを待ち受けてbytesオブジェクトとして受信,デコード recvの引数はバッファ 
             if not data or data == "quit":#空かquitなら処理終了 
+                roomPlayer -=1
                 break
             print_safe(f"[{address}] {data}") #コンソール上に受信したメッセージを記 
             #response = f"[{address}] said : [{data}]" 
@@ -80,6 +92,9 @@ def input_thread():
             msg = input('>')
             print(f"全クライアントに'{msg}'を送信しました。")
             server_message(f"[server]:{msg}")
+        elif cmd == "cap":
+            print(f"{roomPlayer}/{CAPACITY}")
+            server_message(f"{roomPlayer}/{CAPACITY}")
 
 #コンソールに常に[>]を出すための割り込み処理 
 def print_safe(*args, **kwargs): #可変長引数を使う 
@@ -93,7 +108,9 @@ def print_safe(*args, **kwargs): #可変長引数を使う
 
 #サーバのipとport設定 
 ip = '127.0.0.1' #(127.0.0.1)はlocalhost host名の指定も可 
-port = 8000 #0-1023以外
+print("ポートを入力してください")
+#port = 8003 #0-1023以外
+port = int(input(">>>"))
 
 #ソケットの作成
 s= socket.socket(socket.AF_INET, socket.SOCK_STREAM) 

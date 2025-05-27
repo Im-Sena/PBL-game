@@ -4,7 +4,9 @@ import threading #マルチクライアントをのためのライブラリ(pyth
 
 #サーバのipとport設定 
 ip = '127.0.0.1' #(127.0.0.1)はlocalhost host名の指定も可 
-port = 8000 #0-1023以外
+print("ポートを入力してください")
+#port = 8003 #0-1023以外
+port = int(input(">>>"))
 
 #ソケットの作成
 s= socket.socket(socket.AF_INET, socket.SOCK_STREAM) 
@@ -29,8 +31,10 @@ def receive_messages(sock):
 #with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
 #    s.connect((ip, port))  # サーバに接続
 
+#メッセージを受け取る関数をthreadで実行
 threading.Thread(target=receive_messages, args=(s,), daemon=True).start()
-    #接続の維持
+
+ #接続の維持
 while True:
     print("<メッセージを入力してください>")
     message = input('>>>')
