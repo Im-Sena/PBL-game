@@ -13,8 +13,8 @@ print("Connected!!!!!")
 
 # --- ユーザー情報送信 ---
 print("ルーム名を入力してください")
-#room = input(">>>")
-room = str(111)
+room = input(">>>")
+#room = str(111)
 print("ユーザーネームを入力してください")
 name = input(">>>")
 s.sendall((room + "\n").encode('utf-8'))
