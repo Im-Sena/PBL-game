@@ -3,11 +3,11 @@ import threading #マルチクライアントをのためのライブラリ(pyth
 import sys #システムにアクセスするためのライブラリ(python標準)
 
 clients =[]  # 現在接続している全クライアントのソケット 
-clients_full = []
+clients_full = [] #現在接続している全クライアントのソケット ,アドレス, usernameを格納
 clients_lock=threading.Lock()
 
-roomPlayer = 0
-CAPACITY = 4
+roomPlayer = 0 #現在のルーム内の人数を格納する 
+CAPACITY = 4 #最大人数 
 
 
 
@@ -46,9 +46,16 @@ def handle_client(connection, address):
 
     global roomPlayer
 
+    #ユーザーネーム登録
+    try:
+        username = connection.recv(1024).decode("utf-8")  # 最初にユーザー名を受信
+    except:
+        connection.close()
+        return
+
     with clients_lock: #割り込み 
          clients.append(connection) #配列の末尾に追加 
-         clients_full.append((conn, addr))
+         clients_full.append((conn, addr, username))
          roomPlayer += 1
     try:
         while True:
@@ -56,10 +63,10 @@ def handle_client(connection, address):
             if not data or data == "quit":#空かquitなら処理終了 
                 roomPlayer -=1
                 break
-            print_safe(f"[{address}] {data}") #コンソール上に受信したメッセージを記 
+            print_safe(f"[{username}] {data}") #コンソール上に受信したメッセージを記 
             #response = f"[{address}] said : [{data}]" 
             #connection.send(response.encode("utf-8")) #エンコード,送信 
-            broadcast(f"[{address}] {data}", connection)  # みんなに配信 
+            broadcast(f"[{username}] {data}", connection)  # みんなに配信 
     except:
         pass
     finally:
@@ -67,8 +74,9 @@ def handle_client(connection, address):
         with clients_lock:
             clients.remove(connection)
             clients_full.remove((conn, addr))
+            clients_full[:] = [(c, a, n) for (c, a, n) in clients_full if c != connection] #clients_full に格納されているすべての (conn, addr, name) タプルの中から、切断されたクライアントの connection を持つ要素だけ削除する。
         connection.close(connection)
-        print(f"[-] Disconnected {address}")
+        print(f"[-] Disconnected {username}")
         
 
 
@@ -86,8 +94,8 @@ def input_thread():
                     print("[接続中クライアント] なし")
                 else:
                     print("[接続中クライアント]")
-                    for i, (conn, addr) in enumerate(clients_full, 1):#enumerateでインデックスを付与
-                        print(f"  {i}: {addr[0]}:{addr[1]}")
+                    for i, (conn, addr, uname) in enumerate(clients_full, 1):#enumerateでインデックスを付与
+                        print(f"  {i}: {uname} ({addr[0]}:{addr[1]})")
         elif cmd == "say":
             msg = input('>')
             print(f"全クライアントに'{msg}'を送信しました。")
@@ -117,7 +125,7 @@ s= socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 #ソケットを作成して変数sに割り当て AF_INET = ipv4 
 #ストリームソケットはTCPを使用して通信を行えるようにしてくれる 
 s.bind((ip, port)) #ipとportをタプルで指定  
-s.listen(4) #サーバを有効にして接続を受け取る 引数で最大接続人数指定可 
+s.listen(CAPACITY) #サーバを有効にして接続を受け取る 引数で最大接続人数指定可 
 
 s.settimeout(1.0)  # 1秒ごとに accept() をタイムアウト 
 running = True
@@ -126,27 +134,8 @@ running = True
 print(f"[✓]Server started on {ip}:{port}, waiting for connections...")
 print("Type 'exit' to shut down.")
 
-'''
-#接続の受付 
-connection, address = s.accept() #s.accept()で接続を受け付け
-print("client ; {}".format(address)) #接続相手のipをprint 
-#接続の維持
-while True:
-    receive = connection.recv(4096).decode()#相手から送信されるデータを待ち受けてbytesオブジェクトとして受信,デコード recvの引数はバッファ 
-    if receive == "quit": #quitを受信でbreak 
-        break
-    print("received -> message : {}".format(receive))
-    send_message = "you said : [{}] ".format(receive)
-    connection.send(send_message.encode("utf-8")) #エンコード,クライアントに送信 
 
-
-#接続終了 
-connection.close() #コネクション切断 
-s.close()
-print("Communication disconnected")
-'''
-
-threading.Thread(target=input_thread, daemon=True).start()
+threading.Thread(target=input_thread, daemon=True).start() #inputをスレッドで実行 
 
 #loop 
 while running:

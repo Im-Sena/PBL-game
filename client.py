@@ -15,7 +15,13 @@ s= socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 #s.bind((ip, port)) #ipとportをタプルで指定 
 s.connect((ip, port))
 
+
 print("Connected!!!!!")
+
+#ユーザーネーム登録 
+print("ユーザーネームを入力してください")
+username = input(">>>")
+s.send(username.encode('utf-8'))  # サーバーに送信
 
 # --- サーバからのメッセージを受け取って表示 ---
 def receive_messages(sock):
@@ -36,7 +42,7 @@ threading.Thread(target=receive_messages, args=(s,), daemon=True).start()
 
  #接続の維持
 while True:
-    print("<メッセージを入力してください>")
+    #print("<メッセージを入力してください>")
     message = input('>>>')
     if not message: #空だったらquitを送信 
         s.send("quit".encode("utf-8"))
