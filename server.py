@@ -90,6 +90,8 @@ def handle_client(connection, address):
             elif data == "/start":
                 print_safe(f"[{room} / {name}] {data}")
                 inGame(room, data, name)
+            elif data == "/time":#/timeを受け取るとクライアント側へタイマーを起動するコマンドを送信
+                broadcast_to_room_all(room, f"%start_timer")
             elif data == "/member":
                 print_safe(f"[{room} / {name}] {data}")
                 with rooms_lock:

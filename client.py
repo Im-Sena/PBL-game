@@ -1,6 +1,7 @@
 import socket  # ソケット通信ライブラリ
 import threading  # マルチスレッド用ライブラリ
 import sys  # システム制御用ライブラリ
+import time #時間計測用ライブラリ
 
 # --- 接続設定 ---
 ip = '127.0.0.1'
@@ -19,6 +20,18 @@ print("ユーザーネームを入力してください")
 name = input(">>>")
 s.sendall((room + "\n").encode('utf-8'))
 s.sendall((name + "\n").encode('utf-8'))
+
+# --- タイマーのカウントダウン開始 ---
+#後々はお題を与えられたクライアント全員から確認したというコマンドが揃ったら実行するようにした方がいいかな
+def start_timer(seconds):
+    for i in range(seconds, -1, -1):
+        if i == 0:
+            print("\r"+str(i)+"秒")
+        else:
+            print("\r"+str(i)+"秒",end="")
+        time.sleep(1)
+    print_safe(f'タイマー終了！')
+    s.sendall(("end_timer\n").encode('utf-8'))
 
 # --- プロンプト補正付き出力 ---
 def print_safe(*args, **kwargs):
@@ -80,7 +93,10 @@ def receive_messages(sock):
                     print_safe("コマンドです")
                     #lineの%を除去して表示
                     line = line[1:].strip()
-                    print_safe(line)         
+                    print_safe(line)
+                    #start_timerを受け取ったらタイマーを起動するstart_timer関数を実行
+                    if line == "start_timer":                        
+                        start_timer(5)         
                 else:
                     # 普通のメッセージは画面に表示
                     print_safe(line)
